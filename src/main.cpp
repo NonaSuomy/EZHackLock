@@ -207,11 +207,20 @@
 rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
 
 */
+
+// Comment this out to disable serial debug print.
+#define DEBUG 
+
+#ifdef DEBUG
+  //#include "DebugUtils.h" // Debug Serial Print.
+  long baud = 115200; //74880,115200;
+#endif
+
 #include <Arduino.h>
 // Keypad Mark Stanley, Alexander Brevig V3.1.1 : https://github.com/Chris--A/Keypad
 #include <Keypad.h>
 //#include <Servo.h>
-// DS3232RTC Jack Christensen : V1.2.10 https://github.com/JChristensen/DS3232RTC
+// DS3232RTC Jack Christensen V1.2.10 : https://github.com/JChristensen/DS3232RTC
 #include <DS3232RTC.h>
 // Adafruit_PN532 Adafruit V1.2.0 : https://github.com/adafruit/Adafruit-PN532/
 #include <Adafruit_PN532.h>
@@ -384,8 +393,7 @@ int tempo[] = {
 // Underworld melody
 int underworld_melody[] = {
   NOTE_C4, NOTE_C5, NOTE_A3, NOTE_A4,
-  NOTE_AS3, NOTE_AS4, 0,
-  0
+  NOTE_AS3, NOTE_AS4, 0, 0
   /*,
   NOTE_C4, NOTE_C5, NOTE_A3, NOTE_A4,
   NOTE_AS3, NOTE_AS4, 0,
@@ -449,6 +457,7 @@ const int led1Pin   = 10;
 const int led2Pin   = 11;
 const int led3Pin   = 13;    // The number of the LED pin.
 const int auxPin    = 17;    // The number of the AUX pin.
+
 // Variables will change:
 int limit1State = 0;         // Variable for reading the pushbutton status.
 int limit2State = 0;         // Variable for reading the pushbutton status.
@@ -459,6 +468,9 @@ tmElements_t tm;
 bool limit1ran = false;
 bool limit2ran = false;
 bool turnoff = false;
+// 0 Null; 1 Right; 2 Left
+int direction = 0;
+
 // https://arduino.stackexchange.com/questions/21619/detect-when-rfid-card-is-absent
 // 
 // http://www.lucadentella.it/OTP/
@@ -494,7 +506,7 @@ bool turnoff = false;
 */
 
 
-//                   78=N  83=S  66=B  101=e 101=e 112=p 66=B  111=o 111=o 112=p
+// ASCII Number:     78=N  83=S  66=B  101=e 101=e 112=p 66=B  111=o 111=o 112=p
 uint8_t hmacKey[] = {0x4e, 0x53, 0x42, 0x65, 0x65, 0x70, 0x42, 0x6f, 0x6f, 0x70};
 TOTP totp = TOTP(hmacKey, 10);
 
@@ -519,10 +531,22 @@ char inputCode[7];
 int inputCode_idx;
 boolean lockOpen;
 
+void sing(int s);
+void buzz(int targetPin, long frequency, long length);
+void displayRTC_Time();
+void print2digits(int number);
+void printDateTime(time_t t);
+void printTime(time_t t);
+void printDate(time_t t);
+void printI00(int val, char delim);
+
 // The setup function runs once when you press reset or power the board
 void setup() {
+  //RTC.set(DateTime(F(__DATE__), F(__TIME__)));
+  #ifdef DEBUG
   // Initialize serial communications at 9600 bps:
-  Serial.begin(115200);
+    Serial.begin(115200);
+  #endif
   // Initialize digital pin LED_BUILTIN as an output.
   pinMode(limit1Pin, INPUT);
   pinMode(limit2Pin, INPUT);
@@ -533,39 +557,55 @@ void setup() {
   pinMode(led1Pin, OUTPUT);
   pinMode(led2Pin, OUTPUT);
   pinMode(led3Pin, OUTPUT);
-  Serial.println("EZ-Set Test Started...");
+  #ifdef DEBUG
+    Serial.println(F("EZ-Set Test Started..."));
+  #endif
   /*
   nfc.begin();
   uint32_t versiondata = nfc.getFirmwareVersion();
   if (! versiondata) {
-    Serial.print("Didn't find PN53x board");
+    #ifdef DEBUG
+    Serial.print(F("Didn't find PN53x board"));
+    #endif
     //while (1); // halt
   }
   // Got ok data, print it out!
-  Serial.print("Found chip PN5"); Serial.println((versiondata>>24) & 0xFF, HEX); 
-  Serial.print("Firmware ver. "); Serial.print((versiondata>>16) & 0xFF, DEC); 
-  Serial.print('.'); Serial.println((versiondata>>8) & 0xFF, DEC);
-  
+  #ifdef DEBUG
+  Serial.print(F("Found chip PN5")); Serial.println((versiondata>>24) & 0xFF, HEX); 
+  Serial.print(F("Firmware ver. ")); Serial.print((versiondata>>16) & 0xFF, DEC); 
+  Serial.print(F('.')); Serial.println((versiondata>>8) & 0xFF, DEC);
+  #endif
   // configure board to read RFID tags
   nfc.SAMConfig();
-  
-  Serial.println("Waiting for an ISO14443A Card ...");
+  #ifdef DEBUG
+  Serial.println(F("Waiting for an ISO14443A Card ..."));
+  #endif
   */
   setSyncProvider(RTC.get);   // the function to get the time from the RTC
-  if(timeStatus() != timeSet)
-    Serial.println("Unable to sync with the RTC");
+  if(timeStatus() != timeSet) {
+  ;
+  #ifdef DEBUG
+    Serial.println(F("Unable to sync with the RTC"));
+  #endif
+  } 
   else
-    Serial.println("RTC has set the system time");
+  {
+  ;
+  #ifdef DEBUG
+    Serial.println(F("RTC has set the system time"));
+  #endif
+  }
   // Init software RTC with the current time
   //rtcs.stopRTC();
   //rtcs.setDate(10, 3, 2020);
   //rtcs.setTime(1, 29, 00);
   //rtcs.startRTC();
-  Serial.println("RTC initialized and started");
-  
+  #ifdef DEBUG
+  Serial.println(F("RTC initialized and started"));
+  #endif
   // reset input buffer index
   inputCode_idx = 0;
-  displayRTC_Time();
+  //displayRTC_Time();
 }
 
 int song = 0;
@@ -574,7 +614,7 @@ void sing(int s) {
   // Iterate over the notes of the melody:
   song = s;
   if (song == 2) {
-    Serial.println(" 'Underworld Theme'");
+    Serial.println(F(" 'Underworld Theme'"));
     int size = sizeof(underworld_melody) / sizeof(int);
     for (int thisNote = 0; thisNote < size; thisNote++) {
 
@@ -594,7 +634,9 @@ void sing(int s) {
       buzz(melodyPin, 0, noteDuration);
     }
   } else if (song == 3) {
-    Serial.println(" 'Button Press'");
+    #ifdef DEBUG
+    Serial.println(F(" 'Button Press'"));
+    #endif
     int size = sizeof(buttonpress_melody) / sizeof(int);
     for (int thisNote = 0; thisNote < size; thisNote++) {
 
@@ -614,8 +656,9 @@ void sing(int s) {
       buzz(melodyPin, 0, noteDuration);
     }
   } else {
-
-    Serial.println(" 'Mario Theme'");
+    #ifdef DEBUG
+    Serial.println(F(" 'Mario Theme'"));
+    #endif
     int size = sizeof(melody) / sizeof(int);
     for (int thisNote = 0; thisNote < size; thisNote++) {
 
@@ -659,13 +702,14 @@ void displayRTC_Time()
 {
   //read time from RTC
   int status = RTC.read(tm); //TimeElements variable
-  Serial.print("Ok, RTC Time = ");
+  #ifdef DEBUG
+  Serial.print(F("Ok, RTC Time = "));
   print2digits(tm.Hour);
   Serial.write(':');
   print2digits(tm.Minute);
   Serial.write(':');
   print2digits(tm.Second);
-  Serial.print(", Date (D/M/Y) = ");
+  Serial.print(F(", Date (D/M/Y) = "));
   Serial.print(tm.Day);
   Serial.write('/');
   Serial.print(tm.Month);
@@ -673,17 +717,20 @@ void displayRTC_Time()
   Serial.print(tmYearToCalendar(tm.Year));
   Serial.println();
   //unix time
-  Serial.print("Unix Time ");
+  Serial.print(F("Unix Time "));
   Serial.println(RTC.get());
+  #endif
 }
 
 void print2digits(int number) {
   if (number >= 0 && number < 10) {
     Serial.write('0');
   }
+  #ifdef DEBUG
   Serial.print(number);
+  #endif
 }
-
+/*
 // print date and time to Serial
 void printDateTime(time_t t)
 {
@@ -691,6 +738,7 @@ void printDateTime(time_t t)
     Serial << ' ';
     printTime(t);
 }
+
 
 // print time to Serial
 void printTime(time_t t)
@@ -717,7 +765,7 @@ void printI00(int val, char delim)
     if (delim > 0) Serial << delim;
     return;
 }
-
+*/
 char rx_byte = 0;
 String rx_str = "";
 boolean not_number = false;
@@ -735,17 +783,21 @@ void loop() {
     else if (rx_byte == '\n') {
       // end of string
       if (not_number) {
-        Serial.println("Not a number");
+        #ifdef DEBUG
+        Serial.println(F("Not a number"));
+        #endif
       }
       else {
         // multiply the number by 2
         result = rx_str.toInt() * 2;
+        #ifdef DEBUG
         // print the result
         Serial.print(rx_str);
-        Serial.print(" x 2 = ");
+        Serial.print(F(" x 2 = "));
         Serial.print(result);
-        Serial.println("");
-        Serial.println("Enter a number to multiply by 2.");
+        Serial.println(F(""));
+        Serial.println(F("Enter a number to multiply by 2."));
+        #endif
       }
       not_number = false;         // reset flag
       rx_str = "";                // clear the string for reuse
@@ -759,21 +811,29 @@ void loop() {
   char* newCode = totp.getCode(UNIX);
   if(strcmp(code, newCode) != 0) {
     strcpy(code, newCode);
+    #ifdef DEBUG
+    displayRTC_Time();
     Serial.println(code);
+    #endif
   }
   static time_t tLast;
   time_t t;
-  tmElements_t tm;
+  //tmElements_t tm;
   t = now();
   if (t != tLast) {
     tLast = t;
-    printDateTime(t);
+    
     if (second(t) == 0) {
+      //printDateTime(t);
       float c = RTC.temperature() / 4.;
-      float f = c * 9. / 5. + 32.;
-      Serial << F("  ") << c << F(" C  ") << f << F(" F");
+      //float f = c * 9. / 5. + 32.;
+      //Serial.print << F("  ") << c << (F(" C  ")) << f << (F(" F"));
+      Serial.print(c);
+      Serial.print(F(" C"));
+      Serial.println(F(""));
     }
-    Serial << endl;
+    
+    //Serial.print << endl;
   }
   char key = keypad.getKey();
   digitalWrite(led1Pin, LOW);
@@ -784,18 +844,28 @@ void loop() {
     sing(3);
     // # resets the input buffer    
     if(key == 'E') {
-      Serial.println("E pressed, resetting the input buffer...");
+      #ifdef DEBUG
+      Serial.println(F("E pressed, resetting the input buffer..."));
+      #endif
       inputCode_idx = 0;      
     //}
     
     // * closes the door
     //else if(key == 'E') {
 
-      if(lockOpen == false) 
-        Serial.println("E pressed but the door is already closed");
+      if(lockOpen == false) {
+      ;
+      #ifdef DEBUG
+        Serial.println(F("E pressed but the door is already closed"));
+      #endif
+      }
       else {
-
-        Serial.println("E pressed, closing the door...");
+        #ifdef DEBUG
+        Serial.println(F("E pressed, closing the door..."));
+        #endif
+        if (direction == 2) {
+           limit2ran = true;
+        }
         //for(int i = 0; i < SERVO_OPENED - SERVO_CLOSED; i++) {
           //doorServo.write(SERVO_OPENED - i);
           //delay(SERVO_DELAY);
@@ -813,22 +883,26 @@ void loop() {
         
         inputCode[inputCode_idx] = '\0';
         inputCode_idx = 0;
-        Serial.print("New code inserted: ");
+        #ifdef DEBUG
+        Serial.print(F("New code inserted: "));
         Serial.println(inputCode);
-        
+        #endif
         //long GMT = rtc.getTimestamp();
-        displayRTC_Time();
-        Serial.println();
-        
+        //displayRTC_Time();
+        #ifdef DEBUG
+        Serial.println(F(""));
+        #endif
         totpCode = totp.getCode(UNIX);
         
         // Code is ok :)
         if(strcmp(inputCode, totpCode) == 0) {
           
-          if(lockOpen == true) Serial.println("Code ok but the door is already open");
+          if(lockOpen == true) Serial.println(F("Code ok but the door is already open"));
           
           else {
-            Serial.println("Code ok, opening the door...");
+            #ifdef DEBUG
+            Serial.println(F("Code ok, opening the door..."));
+            #endif
             digitalWrite(led1Pin, HIGH); 
             digitalWrite(led2Pin, LOW);
             delay(1000);
@@ -838,17 +912,24 @@ void loop() {
               //doorServo.write(SERVO_CLOSED + i);
               //delay(SERVO_DELAY);
             //}
+            if (direction == 1) {
+              limit1ran = true;
+            }
             lockOpen = true;
           }
           
         // Code is wrong :(  
         } else {
-          Serial.print("Wrong code... the correct was: ");
+          #ifdef DEBUG
+          Serial.print(F("Wrong code... the correct was: "));
+          #endif
           digitalWrite(led2Pin, HIGH);
           digitalWrite(led1Pin, LOW);
           delay(1000);
           digitalWrite(led1Pin, HIGH);
+          #ifdef DEBUG
           Serial.println(totpCode);
+          #endif
           sing(2);        
         }
       }      
@@ -866,9 +947,11 @@ void loop() {
   
   if (success) {
     // Display some basic information about the card
-    Serial.println("Found an ISO14443A card");
-    Serial.print("  UID Length: ");Serial.print(uidLength, DEC);Serial.println(" bytes");
-    Serial.print("  UID Value: ");
+    #ifdef DEBUG
+    Serial.println(F("Found an ISO14443A card"));
+    Serial.print(F("  UID Length: "));Serial.print(uidLength, DEC);Serial.println(F(" bytes"));
+    Serial.print(F("  UID Value: "));
+    #endif
     nfc.PrintHex(uid, uidLength);
     
     if (uidLength == 4)
@@ -880,11 +963,15 @@ void loop() {
       cardid <<= 8;
       cardid |= uid[2];  
       cardid <<= 8;
-      cardid |= uid[3]; 
-      Serial.print("Seems to be a Mifare Classic card #");
+      cardid |= uid[3];
+      #ifdef DEBUG
+      Serial.print(F("Seems to be a Mifare Classic card #"));
       Serial.println(cardid);
+      #endif
     }
-    Serial.println("");
+    #ifdef DEBUG
+    Serial.println(F(""));
+    #endif
   }
   */
 
@@ -897,9 +984,13 @@ void loop() {
   //Serial.println(sensorValue);
   //delay(1);        // delay in between reads for stability
   if (auxState == HIGH) {
-    //Serial.println("AUX High");
+    //#ifdef DEBUG
+    //Serial.println(F("AUX High"));
+    //#endif
   } else {
-    //Serial.println("AUX Low");
+    //#ifdef DEBUG
+    //Serial.println(F("AUX Low"));
+    //#endif
     turnoff = true;
     /*
     if (limit1ran == true) {
@@ -925,44 +1016,68 @@ void loop() {
   if (turnoff == false) {
     // Check if the limit switch is pressed. If it is, the limit1State is HIGH:
     if (limit1State == HIGH) {
-      limit1ran = true;
+      // Limit switch knob to the right.
+      Serial.println(F("limit1State==HIGH"));
+      direction = 2;
+      // Turns lock back and forth test (turn left).
+      //limit2ran = false;
+      //limit1ran = true;
+      // Turn off both motor directions.
       limit2ran = false;
+      limit1ran = false;
       // turn LED/Motor on:
       //digitalWrite(led3Pin, HIGH);
       //digitalWrite(motorRPin, HIGH);   // turn the LED on (HIGH is the voltage level)
       if (limit1ran == true) {
         //sing(2);
-        //Serial.println("Limit Switch 1 High.");
-        limit1ran = false;
+        //#ifdef DEBUG
+        //Serial.println(F("Limit Switch 1 High."));
+        //#endif
+        //limit1ran = false;
       }
     } 
     else if (limit1State == LOW) {
+      direction = 0;
       if (limit1ran == true) {
         // turn LED off:
-        digitalWrite(led3Pin, LOW);
+        //digitalWrite(led3Pin, LOW);
         //digitalWrite(motorRPin, LOW);    // turn the LED off by making the voltage LOW
-        //Serial.println("Limit Switch 1 Low.");
+        //#ifdef DEBUG
+        //Serial.println(F("Limit Switch 1 Low."));
+        //#endif
         //limit1ran = false;
       }
     }
     // Check if the limit switch is pressed. If it is, the limit1State is HIGH:
     if (limit2State == HIGH) {
-      limit2ran = true;
+      // Limit switch knob to the left.
+      Serial.println(F("limit2State==HIGH"));
+      direction = 1;
+      // Turns lock back and forth test (turn right).
+      //limit1ran = false;
+      //limit2ran = true;
       limit1ran = false;
+      limit2ran = false;
       if (limit2ran == true) {
         // turn LED on:
         //digitalWrite(led3Pin, HIGH);
         //digitalWrite(motorLPin, HIGH);   // turn the LED on (HIGH is the voltage level)
         //sing(1);
-        //Serial.println("Limit Switch 2 High.");
+        //#ifdef DEBUG
+        //Serial.println(F("Limit Switch 2 High."));
+        //#endif
+        //limit2ran = false;
       }
     } 
     else if (limit2State == LOW) {
+      direction = 0;
       if (limit2ran == true) {
         // turn LED off:
         //digitalWrite(led3Pin, LOW);
         //digitalWrite(motorLPin, LOW);    // turn the LED off by making the voltage LOW
-        //Serial.println("Limit Switch 2 Low.");
+        //#ifdef DEBUG
+        //Serial.println(F("Limit Switch 2 Low."));
+        //#endif
         //limit2ran = false;
       }
     }
@@ -975,20 +1090,26 @@ void loop() {
     limit2ran = false;
     if (turnoff == true){
       turnoff = false;
-      Serial.println("turnoff = false.");
+      #ifdef DEBUG
+      Serial.println(F("turnoff = false."));
+      #endif
     }
     else if (turnoff == false){
       turnoff = true;
-      Serial.println("turnoff = true.");
+      #ifdef DEBUG
+      Serial.println(F("turnoff = true."));
+      #endif
     }
   }
   */
   if (limit1ran == true) {
+    Serial.println(F("limit1ran==true Turning left"));
     limit2ran = false;
     digitalWrite(motorLPin, LOW);
     digitalWrite(motorRPin, HIGH);
   }
   if (limit2ran == true) {
+    Serial.println(F("limit2ran==true Turning right"));
     limit1ran = false;
     digitalWrite(motorRPin, LOW);
     digitalWrite(motorLPin, HIGH);
